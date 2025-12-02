@@ -18,7 +18,12 @@ dependencies = [
     "imageio",
     "tifffile",
     "click",
-    "matplotlib"
+    "matplotlib",
+    "rawpy @ git+https://github.com/shenmintao/rawpy.git",
+    "colour-science @ git+https://github.com/colour-science/colour.git@develop",
+    "scipy",
+    "exifread",
+    "Pillow"
 ]
 
 [project.urls]

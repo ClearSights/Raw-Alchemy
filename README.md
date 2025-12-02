@@ -1,65 +1,47 @@
 # Raw Alchemy
 
-[简体中文](README_zh-CN.md)
+[English](README.md) | [简体中文](README_zh-CN.md)
 
 ---
 
-A Python-based command-line tool for an advanced RAW image processing pipeline. It is designed to convert RAW files into a scene-referred linear format within the ACES (Academy Color Encoding System) framework, apply camera-specific log curves, and integrate creative LUTs for a complete and color-managed workflow.
+A Python-based command-line tool for advanced RAW image processing pipelines. It is designed to convert RAW files into a wide-gamut linear space (ProPhoto RGB), apply camera-specific Log curves, and integrate creative LUTs, achieving a complete and color-managed workflow.
 
-### Core Concepts
+### Core Philosophy
 
-Many photographers and videographers rely on creative LUTs (Look-Up Tables) to achieve specific visual styles. However, a common pain point arises: **applying a LUT that works perfectly in a video workflow to a RAW photo often results in incorrect colors.**
+Many photographers and videographers rely on creative LUTs (Look Up Tables) to achieve specific visual styles. However, a common pain point is: **When applying LUTs that perform perfectly in video workflows to RAW photos, colors often go wrong.**
 
-This issue stems from a color space mismatch. Most creative LUTs are designed for a specific Log color space (e.g., Sony's S-Log3/S-Gamut3.Cine or Fujifilm's F-Log2/F-Gamut). When you open a RAW photo in software like Photoshop or Lightroom and directly apply these LUTs, the default decoded color space of the RAW file does not match the LUT's expected input, leading to severe color and tonal shifts.
+This issue stems from color space mismatches. Most creative LUTs are designed for specific Log color spaces (e.g., Sony S-Log3/S-Gamut3.Cine or Fujifilm F-Log2/F-Gamut). When you open a RAW photo in Photoshop or Lightroom and directly apply these LUTs, the software's default RAW decoding color space does not match the LUT's expected input space, leading to severe color and tonal deviations.
 
-**Raw Alchemy** is designed to solve this exact problem. It builds a rigorous, automated color pipeline to ensure any LUT can be accurately applied to any RAW file:
+**Raw Alchemy** was born to solve this problem. It builds a rigorous, automated color pipeline to ensure any LUT can be accurately applied to any RAW file:
 
-1.  **Standardized Decoding to ACES**: The tool first decodes any RAW file into a standardized, ultra-wide gamut intermediate space—ACES AP0 (Linear). This neutralizes the inherent color science differences between camera brands, providing a consistent, device-independent starting point for all operations.
-2.  **Precise Log Signal Preparation**: Next, it accurately transforms the image data from the ACES space into the precise Log format the target LUT expects, such as the `F-Log2` curve and `F-Gamut` color space. This step is crucial for color consistency, as it perfectly mimics the process of how a camera generates its Log video signal internally.
-3.  **Correct LUT Application**: By applying your creative LUT to this precisely prepared Log image, the resulting color and tone will perfectly match its intended appearance in a professional video editing suite like DaVinci Resolve.
-4.  **Color-Managed Output**: Finally, the LUT-processed image is safely transformed from the wide gamut space into the standard Adobe RGB (1998) space, generating a 16-bit TIFF file. This ensures the final result remains accurate for viewing on different devices and for printing.
+1.  **Standardized Decoding**: The project first decodes RAW files from any source into a standardized, wide-gamut intermediate space — ProPhoto RGB (Linear). This eliminates color science differences inherent in different camera brands, providing a unified starting point for all operations.
+2.  **Precise Log Signal Preparation**: Next, it precisely converts the linear image data into the Log format expected by the target LUT, such as `F-Log2` curve and `F-Gamut` color space. This step is critical for ensuring color consistency, perfectly simulating the process of generating Log video signals inside a camera.
+3.  **Correct LUT Application**: Applying your creative LUT on this accurately "disguised" Log image results in color and tonal performance identical to that in professional video software (like DaVinci Resolve).
+4.  **High-Bit Depth Output**: Finally, the processed image (keeping Log encoding or with LUT effects applied) is saved as a 16-bit TIFF file, maximizing dynamic range and color information retention for professional grading in Photoshop or DaVinci Resolve.
 
-Through this pipeline, `Raw Alchemy` bridges the gap between RAW photography and professional video color grading, empowering photographers with the same level of color management precision enjoyed in the world of cinema.
+Through this process, `Raw Alchemy` breaks down the barrier between RAW photography and professional video color grading, allowing photographers to enjoy cinema-level color management precision.
 
-### Processing Pipeline
+### Process Flow
 
-The tool follows these precise color transformation steps:
+This tool follows these precise color conversion steps:
 
-`RAW (Camera Native)` -> `ACES AP0 (Linear)` -> `Camera Gamut (Linear)` -> `Camera Log (e.g., F-Log2)` -> `(Optional) Creative LUT` -> `Adobe RGB (1998) TIFF`
+`RAW (Camera Native)` -> `ProPhoto RGB (Linear)` -> `Target Log Gamut (Linear)` -> `Target Log Curve (e.g. F-Log2)` -> `(Optional) Creative LUT` -> `16-bit TIFF`
 
 ### Features
 
--   **RAW to ACES**: Decodes RAW files directly into the ACES AP0 (Linear) working color space.
--   **Log Conversion**: Supports a wide range of camera-specific log formats (F-Log2, S-Log3, LogC4, etc.).
--   **LUT Application**: Applies `.cube` LUT files for creative color grading.
--   **Exposure Control**: Provides a 3-tier exposure logic: manual override, metadata-based `BaselineExposure`, or automatic middle-gray normalization.
--   **High-Quality Output**: Saves the final image as a 16-bit TIFF file in the Adobe RGB (1998) color space.
--   **Tech Stack**: Uses `rawpy` for RAW decoding and `colour-science` for high-precision color transformations.
+-   **RAW to Linear**: Decodes RAW files directly into ProPhoto RGB (Linear) working color space.
+-   **Log Conversion**: Supports various camera-specific Log formats (F-Log2, S-Log3, LogC4, etc.).
+-   **LUT Application**: Supports applying `.cube` creative LUT files directly during conversion.
+-   **Exposure Control**: Provides flexible exposure logic: Manual exposure override, or smart auto-metering (Hybrid, Average, Center-Weighted, Highlight-Safe/ETTR).
+-   **High Quality Output**: Saves the final image as a 16-bit TIFF file.
+-   **Tech Stack**: Uses `rawpy` for RAW decoding and utilizes `colour-science` for high-precision color transformations.
 
 ### Installation
 
-This project has critical dependencies with specific installation requirements. Please follow these steps carefully.
+Install Raw Alchemy:
 
-**Step 1: Install the `rawpy` fork**
-
-`rawpy` has system-level dependencies that vary by OS. Please visit the required fork and follow the detailed installation instructions in its `README`:
-
-➡️ **[https://github.com/shenmintao/rawpy.git](https://github.com/shenmintao/rawpy.git)**
-
-Ensure you can successfully `import rawpy` in Python before proceeding.
-
-**Step 2: Install `colour-science`**
-
-Install the required development branch from GitHub:
 ```bash
-pip install git+https://github.com/colour-science/colour.git@develop
-```
-
-**Step 3: Install Raw Alchemy**
-
-Once the dependencies above are successfully installed, you can install this project.
-```bash
-# Clone this repository
+# Clone the repository
 git clone https://github.com/shenmintao/raw-alchemy.git
 cd raw-alchemy
 
@@ -67,9 +49,11 @@ cd raw-alchemy
 pip install .
 ```
 
+*Note: This project depends on specific versions of `rawpy` and `colour-science`.*
+
 ### Usage
 
-The tool is operated via the `raw-alchemy` command.
+Use via the `raw-alchemy` command.
 
 #### Basic Syntax
 
@@ -79,54 +63,42 @@ raw-alchemy [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
 
 #### Example 1: Basic Log Conversion
 
-This example converts a RAW file to ACES, applies the F-Log2 curve, and saves the result as an Adobe RGB TIFF file.
+This example converts a RAW file to linear space, then applies the F-Log2 curve, and saves the result as a TIFF file (keeping F-Log2/F-Gamut space, suitable for subsequent grading).
 
 ```bash
 raw-alchemy "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-Log2"
 ```
 
-#### Example 2: Conversion with a Creative LUT
+#### Example 2: Conversion with Creative LUT
 
 This example converts a RAW file, applies the S-Log3 curve, then applies a creative LUT (`my_look.cube`), and saves the final result.
 
-**Important**: When using a LUT, you must specify its output color space via `--lut-space`. This is typically `Rec.709` or `Rec.2020`.
-
 ```bash
-raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube" --lut-space "Rec.709"
+raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube"
 ```
 
-#### Example 3: Using the Adobe Matrix
+#### Example 3: Manual Exposure Adjustment
 
-This example forces the initial RAW decoding to use the Adobe coefficient matrix built into `rawpy` instead of relying on the file's metadata.
-
-```bash
-raw-alchemy "input.NEF" "output_adobe.tiff" --matrix-method "adobe"
-```
-
-#### Example 4: Manual Exposure Adjustment
-
-This example manually applies a +1.5 stop exposure compensation, overriding any metadata or auto-exposure logic.
+This example manually applies a +1.5 stop exposure compensation, overriding any auto-exposure logic.
 
 ```bash
 raw-alchemy "input.CR3" "output_bright.tiff" --exposure 1.5
 ```
 
-### Command-Line Options
+### Command Line Options
 
--   `<INPUT_RAW_PATH>`: (Required) Path to the input RAW file (e.g., .CR3, .ARW, .NEF).
--   `<OUTPUT_TIFF_PATH>`: (Required) Path to save the output 16-bit TIFF file.
+-   `<INPUT_RAW_PATH>`: (Required) Input RAW file path (e.g., .CR3, .ARW, .NEF).
+-   `<OUTPUT_TIFF_PATH>`: (Required) Output 16-bit TIFF file save path.
 
--   `--log-space TEXT`: (Optional, Default: `F-Log2`) The target log color space.
--   `--matrix-method TEXT`: (Optional, Default: `metadata`) The matrix to use for the RAW to ACES conversion.
-    -   `metadata`: Use the matrix from the camera file's metadata. This is usually the most accurate option.
-    -   `adobe`: Force the use of the LibRaw built-in Adobe coefficient matrix.
--   `--exposure FLOAT`: (Optional) Manual exposure adjustment in stops (e.g., -0.5, 1.0). Overrides all auto-exposure logic.
--   `--lut TEXT`: (Optional) Path to a `.cube` LUT file to be applied after the log conversion.
--   `--lut-space TEXT`: (Required if `--lut` is used) The output color space of the LUT. Must be one of `Rec.709` or `Rec.2020`.
+-   `--log-space TEXT`: (Required) Target Log color space.
+-   `--exposure FLOAT`: (Optional) Manual exposure adjustment in stops (e.g., -0.5, 1.0). Overrides all auto exposure logic.
+-   `--lut TEXT`: (Optional) Path to a `.cube` LUT file to apply after Log conversion.
+-   `--lens-correct / --no-lens-correct`: (Optional, Default: True) Enable or disable lens distortion correction.
+-   `--metering TEXT`: (Optional, Default: `hybrid`) Auto exposure metering mode: `average` (geometric mean), `center-weighted`, `highlight-safe` (ETTR), or `hybrid` (default).
 
 ### Supported Log Spaces
 
-The `--log-space` option supports the following values:
+`--log-space` supports the following values:
 -   `F-Log`
 -   `F-Log2`
 -   `F-Log2C`
