@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['src\\raw_alchemy\\gui.py'],
+    ['src/raw_alchemy/gui.py'],
     pathex=[],
     binaries=[],
     datas=[('src/raw_alchemy/vendor', 'vendor'), ('icon.ico', '.')],

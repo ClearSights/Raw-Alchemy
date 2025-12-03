@@ -50,16 +50,41 @@ Comparison with Panasonic Lumix Real-time LUT.
 | :---: | :---: |
 | ![In-Camera](Samples/P1013122.jpg) | ![Raw Alchemy](Samples/Converted.jpg) |
 
-### Installation
+### Getting Started (Recommended)
 
-Install Raw Alchemy:
+For most users, the easiest way to use Raw Alchemy is to download the pre-compiled executable. This does not require installing Python or any dependencies.
+
+1.  Go to the [**Releases**](https://github.com/shenmintao/raw-alchemy/releases) page.
+2.  Download the latest executable for your system (e.g., `RawAlchemy-vX.Y.Z-windows.exe` or `RawAlchemy-vX.Y.Z-linux`).
+3.  **For Linux users (IMPORTANT)**: Lens correction relies on the `lensfun` library. To ensure you have the latest camera and lens profiles, you **must** compile and install the `master` branch from source, as the version in most package managers is outdated.
+    *   First, install the necessary build tools and dependencies:
+        ```bash
+        # On Debian/Ubuntu
+        sudo apt-get install build-essential cmake libglib2.0-dev
+        # On Fedora
+        sudo dnf install cmake glib2-devel
+        ```
+    *   Next, clone, build, and install `lensfun`:
+        ```bash
+        git clone https://github.com/lensfun/lensfun.git
+        cd lensfun
+        mkdir build && cd build
+        cmake ..
+        make
+        sudo make install
+        ```
+4.  Run the tool. See the [Usage](#usage) section for details.
+
+### Installation from Source (For Developers)
+
+If you want to install the project from source, you can follow these steps:
 
 ```bash
 # Clone the repository
 git clone https://github.com/shenmintao/raw-alchemy.git
 cd raw-alchemy
 
-# Install the tool
+# Install the tool and its dependencies
 pip install .
 ```
 
@@ -67,11 +92,25 @@ pip install .
 
 ### Usage
 
-Use via the `raw-alchemy` command.
+The executable provides both a Graphical User Interface (GUI) and a Command-Line Interface (CLI).
 
-#### Basic Syntax
+*   **To launch the GUI**: Simply run the executable without any arguments.
+*   **To use the CLI**: Run the executable with command-line arguments.
+
+**Note**: On Linux, you may need to make the file executable first (e.g., `chmod +x ./RawAlchemy-v0.1.0-linux`).
+
+#### CLI Basic Syntax
+
+The command structure is the same whether you are using the executable or installed from source.
 
 ```bash
+# Using the executable on Linux (replace with your actual file name)
+./RawAlchemy-v0.1.0-linux [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
+
+# Using the executable on Windows (replace with your actual file name)
+RawAlchemy-v0.1.0-windows.exe [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
+
+# If installed from source
 raw-alchemy [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
 ```
 
@@ -80,7 +119,8 @@ raw-alchemy [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
 This example converts a RAW file to linear space, then applies the F-Log2 curve, and saves the result as a TIFF file (keeping F-Log2/F-Gamut space, suitable for subsequent grading).
 
 ```bash
-raw-alchemy "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-Log2"
+# Replace './RawAlchemy-linux' with your executable name or 'raw-alchemy' if installed from source
+./RawAlchemy-linux "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-Log2"
 ```
 
 #### Example 2: Conversion with Creative LUT
@@ -88,7 +128,8 @@ raw-alchemy "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-
 This example converts a RAW file, applies the S-Log3 curve, then applies a creative LUT (`my_look.cube`), and saves the final result.
 
 ```bash
-raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube"
+# Replace './RawAlchemy-linux' with your executable name or 'raw-alchemy'
+./RawAlchemy-linux "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube"
 ```
 
 #### Example 3: Manual Exposure Adjustment
@@ -96,7 +137,8 @@ raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.
 This example manually applies a +1.5 stop exposure compensation, overriding any auto-exposure logic.
 
 ```bash
-raw-alchemy "input.CR3" "output_bright.tiff" --log-space "S-Log3" --exposure 1.5
+# Replace './RawAlchemy-linux' with your executable name or 'raw-alchemy'
+./RawAlchemy-linux "input.CR3" "output_bright.tiff" --log-space "S-Log3" --exposure 1.5
 ```
 
 ### Command Line Options

@@ -50,16 +50,41 @@
 | :---: | :---: |
 | ![机内直出](Samples/P1013122.jpg) | ![Raw Alchemy](Samples/Converted.jpg) |
 
-### 安装
+### 快速入门 (推荐)
 
-安装 Raw Alchemy：
+对于大多数用户，使用 Raw Alchemy 最简单的方式是下载为您操作系统预编译的可执行文件。这无需安装 Python 或任何依赖。
+
+1.  前往 [**Releases**](https://github.com/shenmintao/raw-alchemy/releases) 页面。
+2.  下载适用于您系统的最新可执行文件 (例如 `RawAlchemy-vX.Y.Z-windows.exe` 或 `RawAlchemy-vX.Y.Z-linux`)。
+3.  **对于 Linux 用户 (重要)**: 镜头校正功能依赖 `lensfun` 库。为确保您拥有最新的相机和镜头配置文件，您**必须**从源码编译并安装其 `master` 分支，因为大多数包管理器中的版本已经过时。
+    *   首先，安装必要的编译工具和依赖：
+        ```bash
+        # 在 Debian/Ubuntu 上
+        sudo apt-get install build-essential cmake libglib2.0-dev
+        # 在 Fedora 上
+        sudo dnf install cmake glib2-devel
+        ```
+    *   接着，克隆、编译并安装 `lensfun`:
+        ```bash
+        git clone https://github.com/lensfun/lensfun.git
+        cd lensfun
+        mkdir build && cd build
+        cmake ..
+        make
+        sudo make install
+        ```
+4.  运行工具。详情请参阅 [使用方法](#使用方法) 部分。
+
+### 从源码安装 (开发者选项)
+
+如果您希望从源码安装本项目，可以按照以下步骤操作：
 
 ```bash
 # 克隆本仓库
 git clone https://github.com/shenmintao/raw-alchemy.git
 cd raw-alchemy
 
-# 安装工具
+# 安装工具及其依赖
 pip install .
 ```
 
@@ -67,11 +92,25 @@ pip install .
 
 ### 使用方法
 
-通过 `raw-alchemy` 命令来使用该工具。
+可执行文件同时提供了图形用户界面 (GUI) 和命令行界面 (CLI)。
 
-#### 基本语法
+*   **启动 GUI**: 直接运行可执行文件，不带任何参数。
+*   **使用 CLI**: 带命令行参数运行可执行文件。
+
+**注意**: 在 Linux 上，您可能需要先为文件授予执行权限 (例如 `chmod +x ./RawAlchemy-v0.1.0-linux`)。
+
+#### CLI 基本语法
+
+无论您是使用可执行文件还是从源码安装，命令结构都是相同的。
 
 ```bash
+# 在 Linux 上使用可执行文件 (请替换为您的实际文件名)
+./RawAlchemy-v0.1.0-linux [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
+
+# 在 Windows 上使用可执行文件 (请替换为您的实际文件名)
+RawAlchemy-v0.1.0-windows.exe [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
+
+# 如果从源码安装
 raw-alchemy [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
 ```
 
@@ -80,7 +119,8 @@ raw-alchemy [OPTIONS] <INPUT_RAW_PATH> <OUTPUT_TIFF_PATH>
 此示例将一个 RAW 文件转换为线性空间，然后应用 F-Log2 曲线，并将结果保存为 TIFF 文件（保持 F-Log2/F-Gamut 空间，适合后续调色）。
 
 ```bash
-raw-alchemy "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-Log2"
+# 将 './RawAlchemy-linux' 替换为您的可执行文件名，或在源码安装时使用 'raw-alchemy'
+./RawAlchemy-linux "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-Log2"
 ```
 
 #### 示例 2: 使用创意 LUT 进行转换
@@ -88,7 +128,8 @@ raw-alchemy "path/to/your/image.CR3" "path/to/output/image.tiff" --log-space "F-
 此示例转换 RAW 文件，应用 S-Log3 曲线，然后应用一个创意 LUT (`my_look.cube`)，并保存最终结果。
 
 ```bash
-raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube"
+# 将 './RawAlchemy-linux' 替换为您的可执行文件名或 'raw-alchemy'
+./RawAlchemy-linux "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.cube"
 ```
 
 #### 示例 3: 手动曝光调整
@@ -96,7 +137,8 @@ raw-alchemy "input.ARW" "output.tiff" --log-space "S-Log3" --lut "looks/my_look.
 此示例手动应用 +1.5 档的曝光补偿，它将覆盖任何自动曝光逻辑。
 
 ```bash
-raw-alchemy "input.CR3" "output_bright.tiff" --log-space "S-Log3" --exposure 1.5
+# 将 './RawAlchemy-linux' 替换为您的可执行文件名或 'raw-alchemy'
+./RawAlchemy-linux "input.CR3" "output_bright.tiff" --log-space "S-Log3" --exposure 1.5
 ```
 
 ### 命令行选项
