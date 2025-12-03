@@ -228,10 +228,10 @@ class LensfunDatabase:
     
     def __init__(self):
         if not _lensfun:
-            raise RuntimeError("Lensfun库未加载")
+            raise RuntimeError("Lensfun library not loaded")
         self.db = _lensfun.lf_db_create()
         if not self.db:
-            raise RuntimeError("无法创建lensfun数据库")
+            raise RuntimeError("Could not create lensfun database")
         
         # 检查本地数据库路径
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -245,13 +245,13 @@ class LensfunDatabase:
             print(f"  ℹ️ [Lensfun] Local database not found, loading from system default paths.")
             result = _lensfun.lf_db_load(self.db)
 
-        # 检查加载结果
+        # Check loading result
         if result != 0:
-            error_msg = f"加载lensfun数据库失败，错误代码: {result}"
+            error_msg = f"Failed to load lensfun database, error code: {result}"
             if result == 2:  # LF_IO_ERROR
-                error_msg += "\n  💡 [Hint] 数据库文件未找到或无法读取。"
-                error_msg += f"\n     - 检查路径是否正确: {db_path if os.path.isdir(db_path) else 'System paths'}"
-                error_msg += "\n     - 确保文件权限正确。"
+                error_msg += "\n  💡 [Hint] Database file not found or could not be read."
+                error_msg += f"\n     - Check if the path is correct: {db_path if os.path.isdir(db_path) else 'System paths'}"
+                error_msg += "\n     - Ensure file permissions are correct."
             raise RuntimeError(error_msg)
     
     def __del__(self):
@@ -286,13 +286,13 @@ class LensfunModifier:
     def __init__(self, lens: ctypes.POINTER(lfLens), focal: float, crop: float,
                  width: int, height: int, pixel_format: int = LF_PF_F32, reverse: bool = False):
         if not _lensfun:
-            raise RuntimeError("Lensfun库未加载")
+            raise RuntimeError("Lensfun library not loaded")
         
         self.modifier = _lensfun.lf_modifier_create(
             lens, focal, crop, width, height, pixel_format, int(reverse)
         )
         if not self.modifier:
-            raise RuntimeError("无法创建lensfun修改器")
+            raise RuntimeError("Could not create lensfun modifier")
         
         self.width = width
         self.height = height
@@ -354,7 +354,7 @@ class LensfunModifier:
         """
         # 确保数据类型正确
         if pixels.dtype != np.float32:
-            raise ValueError("像素数据必须是float32类型")
+            raise ValueError("Pixel data must be of type float32")
         
         # 获取数据指针
         pixels_ptr = pixels.ctypes.data_as(ctypes.c_void_p)
