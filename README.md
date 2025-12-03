@@ -94,8 +94,43 @@ pip install .
 
 The executable provides both a Graphical User Interface (GUI) and a Command-Line Interface (CLI).
 
-*   **To launch the GUI**: Simply run the executable without any arguments.
+*   **To launch the GUI**: Simply run the executable without any arguments. See the tutorial below.
 *   **To use the CLI**: Run the executable with command-line arguments.
+
+### GUI Tutorial
+
+The graphical interface provides an intuitive way to process your images.
+
+![Image of GUI](Samples/gui_screenshot.png)
+
+#### 1. Select Input and Output
+
+*   **Input Path**:
+    *   Click **Select File...** to process a single RAW file.
+    *   Click **Select Folder...** to process all RAW files within a directory (batch mode).
+*   **Output Path**:
+    *   If processing a single file, you can specify the exact output file path by clicking **Save As...**.
+    *   If processing a folder, you must select an output directory by clicking **Select Folder...**. All processed files will be saved there with a `.tif` extension.
+
+#### 2. Configure Processing Settings
+
+*   **Log Space**: Choose the target Log color space from the dropdown menu (e.g., `F-Log2`, `S-Log3`). This is a required setting.
+*   **LUT File (.cube)**: (Optional) If you want to apply a creative look, click **Browse...** and select a `.cube` LUT file.
+
+#### 3. Adjust Exposure
+
+You can choose between two modes:
+
+*   **Auto**: This is the default mode. You can select a **Metering** method from the dropdown (`hybrid`, `average`, etc.) to let the application determine the best exposure automatically.
+*   **Manual**: Select this mode to override auto-exposure. You can then enter a specific EV value in the **EV Stops** box or use the slider to adjust the exposure compensation manually.
+
+#### 4. Start Processing
+
+*   Click the **Start Processing** button.
+*   The **Log** window at the bottom will display the real-time progress and status of the conversion.
+*   Once finished, a "processing complete" message will appear in the log.
+
+### CLI Usage
 
 **Note**: On Linux, you may need to make the file executable first (e.g., `chmod +x ./RawAlchemy-v0.1.0-linux`).
 
