@@ -52,12 +52,23 @@ def process_image(
     exposure: Optional[float] = None, # 如果是 None 则自动，如果是数字则手动
     lens_correct: bool = True,
     metering_mode: str = 'hybrid',
+    log_queue: Optional[object] = None, # 用于多进程日志记录
 ):
-    
-    print(f"\n🧪 [Raw Alchemy] Processing: {raw_path}")
+    import os
+    filename = os.path.basename(raw_path)
+
+    def _log(message):
+        if log_queue:
+            # 对于 GUI，发送结构化日志以避免混淆
+            log_queue.put({'id': filename, 'msg': message})
+        else:
+            # 对于 CLI，直接打印
+            print(message)
+
+    _log(f"🧪 [Raw Alchemy] Processing: {raw_path}")
 
     # --- Step 1: 统一解码 (始终保持原始亮度) ---
-    print(f"  🔹 [Step 1] Decoding RAW to Linear ProPhoto RGB...")
+    _log(f"  🔹 [Step 1] Decoding RAW to Linear ProPhoto RGB...")
     with rawpy.imread(raw_path) as raw:
         # 关键修改：bright=1.0。无论手动自动，我们先拿最原始的数据。
         # 这样能保证起点一致。
@@ -81,7 +92,7 @@ def process_image(
 
     if exposure is not None:
         # === 路径 A: 手动曝光 ===
-        print(f"  🔹 [Step 2] Manual Exposure Override ({exposure:+.2f} stops)")
+        _log(f"  🔹 [Step 2] Manual Exposure Override ({exposure:+.2f} stops)")
         gain = 2.0 ** exposure
         
         # 应用增益
@@ -89,28 +100,28 @@ def process_image(
 
     else:
         # === 路径 B: 自动测光 ===
-        print(f"  🔹 [Step 2] Auto Exposure ({metering_mode})")
+        _log(f"  🔹 [Step 2] Auto Exposure ({metering_mode})")
         
         # 为了复用 utils 里的函数 (假设它们返回的是处理后的图)，我们直接调用
         if metering_mode == 'center-weighted':
-            img_exposed = utils.auto_expose_center_weighted(img_linear, source_cs, target_gray=0.18)
+            img_exposed = utils.auto_expose_center_weighted(img_linear, source_cs, target_gray=0.18, logger=_log)
         elif metering_mode == 'highlight-safe':
-            img_exposed = utils.auto_expose_highlight_safe(img_linear, clip_threshold=1.0)
+            img_exposed = utils.auto_expose_highlight_safe(img_linear, clip_threshold=1.0, logger=_log)
         elif metering_mode == 'average':
-            img_exposed = utils.auto_expose_linear(img_linear, source_cs, target_gray=0.18)
+            img_exposed = utils.auto_expose_linear(img_linear, source_cs, target_gray=0.18, logger=_log)
         else:
             # 默认混合模式
-            img_exposed = utils.auto_expose_hybrid(img_linear, source_cs, target_gray=0.18)
+            img_exposed = utils.auto_expose_hybrid(img_linear, source_cs, target_gray=0.18, logger=_log)
 
     # --- Step 3: 镜头校正 ---
     if lens_correct:
-        print("  🔹 [Step 3] Applying Lens Correction...")
-        img_exposed = utils.apply_lens_correction(img_exposed, raw_path)
+        _log("  🔹 [Step 3] Applying Lens Correction...")
+        img_exposed = utils.apply_lens_correction(img_exposed, raw_path, logger=_log)
 
 
     # 经验值：饱和度 1.15 ~ 1.25，对比度 1.0 ~ 1.1
     # 这会让你的 RAW 转换结果在过 LUT 之前就拥有足够的"底料"
-    print("  🔹 [Step 3.5] Applying Camera-Match Boost...")
+    _log("  🔹 [Step 3.5] Applying Camera-Match Boost...")
     img_exposed = utils.apply_saturation_and_contrast(img_exposed, saturation=1.25, contrast=1.1)
 
     # --- Step 4: 转换色彩空间 (Linear -> Log) ---
@@ -120,7 +131,7 @@ def process_image(
     if not log_color_space_name:
          raise ValueError(f"Unknown Log Space: {log_space}")
 
-    print(f"  🔹 [Step 4] Color Transform (ProPhoto -> {log_color_space_name} -> {log_curve_name})")
+    _log(f"  🔹 [Step 4] Color Transform (ProPhoto -> {log_color_space_name} -> {log_curve_name})")
 
     # 4.1 Gamut 变换
     log_linear_image = colour.RGB_to_RGB(
@@ -137,16 +148,16 @@ def process_image(
 
     # --- Step 5: LUT (可选) ---
     if lut_path:
-        print(f"  🔹 [Step 5] Applying LUT {lut_path}...")
+        _log(f"  🔹 [Step 5] Applying LUT {lut_path}...")
         try:
             lut = colour.read_LUT(lut_path)
             image_to_save = lut.apply(log_image)
             image_to_save = np.clip(image_to_save, 0.0, 1.0) # LUT 后防溢出
         except Exception as e:
-            print(f"  ❌ [Error] applying LUT: {e}")
+            _log(f"  ❌ [Error] applying LUT: {e}")
 
     # --- Step 6: 保存 ---
-    print(f"  💾 Saving to {output_path}...")
+    _log(f"  💾 Saving to {output_path}...")
     image_16bit = (image_to_save * 65535).astype(np.uint16)
     tifffile.imwrite(output_path, image_16bit)
-    print("  ✅ Done.")
+    _log("  ✅ Done.")

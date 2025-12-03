@@ -17,6 +17,7 @@ def apply_lens_correction(
     correct_distortion: bool = True,
     correct_tca: bool = True,
     correct_vignetting: bool = True,
+    logger: callable = print,
 ) -> np.ndarray:
     """
     应用镜头校正到图像
@@ -39,7 +40,7 @@ def apply_lens_correction(
         校正后的图像
     """
     # 从EXIF提取缺失的元数据
-    exif_data = extract_lens_exif(raw_path)
+    exif_data = extract_lens_exif(raw_path, logger=logger)
     
     # 使用EXIF数据填充缺失参数
     camera_maker = camera_maker or exif_data.get('camera_maker')
@@ -51,15 +52,15 @@ def apply_lens_correction(
     
     # 检查必需参数
     if not camera_model or not lens_model:
-        print("  ⚠️  [Warning] Missing camera or lens info. Skipping lens correction.")
+        logger("  ⚠️  [Warning] Missing camera or lens info. Skipping lens correction.")
         return image
     
     if focal_length is None or aperture is None:
-        print("  ⚠️  [Warning] Missing focal length or aperture info. Skipping lens correction.")
+        logger("  ⚠️  [Warning] Missing focal length or aperture info. Skipping lens correction.")
         return image
     
-    print(f"  🧬 [Lens Correction] {camera_maker} {camera_model} + {lens_maker} {lens_model}")
-    print(f"      Details: {focal_length}mm, f/{aperture}")
+    logger(f"  🧬 [Lens Correction] {camera_maker} {camera_model} + {lens_maker} {lens_model}")
+    logger(f"      Details: {focal_length}mm, f/{aperture}")
     
     try:
         corrected = lf.apply_lens_correction(
@@ -74,14 +75,15 @@ def apply_lens_correction(
             correct_distortion=correct_distortion,
             correct_tca=correct_tca,
             correct_vignetting=correct_vignetting,
+            logger=logger,
         )
         return corrected
     except Exception as e:
-        print(f"  ❌ [Error] Lens correction failed: {e}")
+        logger(f"  ❌ [Error] Lens correction failed: {e}")
         return image
     
 
-def extract_lens_exif(raw_path: str) -> dict:
+def extract_lens_exif(raw_path: str, logger: callable = print) -> dict:
     """
     从RAW文件的EXIF数据中提取镜头相关信息
     
@@ -132,11 +134,11 @@ def extract_lens_exif(raw_path: str) -> dict:
                 pass
         
     except Exception as e:
-        print(f"  ❌ [Error] Error extracting EXIF lens info: {e}")
+        logger(f"  ❌ [Error] Error extracting EXIF lens info: {e}")
     
     return result
 
-def auto_expose_center_weighted(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18) -> np.ndarray:
+def auto_expose_center_weighted(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18, logger: callable = print) -> np.ndarray:
     # 1. 计算亮度
     xyz = colour.RGB_to_XYZ(img_linear, source_colorspace)
     luminance = xyz[:, :, 1]
@@ -168,10 +170,10 @@ def auto_expose_center_weighted(img_linear: np.ndarray, source_colorspace: colou
     # 限制增益
     gain = np.clip(gain, 0.1, 100.0) # 允许小于1.0，因为原图可能过曝
     
-    print(f"  ⚖️  [Auto Exposure] Center-Weighted Gain: {gain:.4f}")
+    logger(f"  ⚖️  [Auto Exposure] Center-Weighted Gain: {gain:.4f}")
     return img_linear * gain
 
-def auto_expose_highlight_safe(img_linear: np.ndarray, clip_threshold: float = 1.0) -> np.ndarray:
+def auto_expose_highlight_safe(img_linear: np.ndarray, clip_threshold: float = 1.0, logger: callable = print) -> np.ndarray:
     # 1. 找到亮度
     # 使用 max(R, G, B) 而不是亮度 Y，因为任何一个通道溢出都是溢出
     max_vals = np.max(img_linear, axis=2)
@@ -189,10 +191,10 @@ def auto_expose_highlight_safe(img_linear: np.ndarray, clip_threshold: float = 1
     else:
         gain = target_high / high_percentile
         
-    print(f"  🛡️  [Auto Exposure] Highlight Safe Gain: {gain:.4f} (99.5% point: {high_percentile:.4f})")
+    logger(f"  🛡️  [Auto Exposure] Highlight Safe Gain: {gain:.4f} (99.5% point: {high_percentile:.4f})")
     return img_linear * gain
 
-def auto_expose_hybrid(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18) -> np.ndarray:
+def auto_expose_hybrid(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18, logger: callable = print) -> np.ndarray:
     # --- 步骤 A: 计算几何平均 (你原来的方法) ---
     xyz = colour.RGB_to_XYZ(img_linear, source_colorspace)
     luminance = xyz[:, :, 1]
@@ -218,7 +220,7 @@ def auto_expose_hybrid(img_linear: np.ndarray, source_colorspace: colour.RGB_Col
     if potential_peak > max_allowed_peak:
         # 如果溢出太严重，限制增益
         limited_gain = max_allowed_peak / p99
-        print(f"  🛡️  [Auto Exposure] Exposure limited by highlight protection. (Desired: {base_gain:.2f}, Actual: {limited_gain:.2f})")
+        logger(f"  🛡️  [Auto Exposure] Exposure limited by highlight protection. (Desired: {base_gain:.2f}, Actual: {limited_gain:.2f})")
         gain = limited_gain
     else:
         gain = base_gain
@@ -226,10 +228,10 @@ def auto_expose_hybrid(img_linear: np.ndarray, source_colorspace: colour.RGB_Col
     # 最后的安全范围 (允许调暗，也允许调亮)
     gain = np.clip(gain, 0.1, 100.0)
     
-    print(f"  ⚖️  [Auto Exposure] Hybrid Gain: {gain:.4f}")
+    logger(f"  ⚖️  [Auto Exposure] Hybrid Gain: {gain:.4f}")
     return img_linear * gain
 
-def auto_expose_linear(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18) -> np.ndarray:
+def auto_expose_linear(img_linear: np.ndarray, source_colorspace: colour.RGB_Colourspace, target_gray: float = 0.18, logger: callable = print) -> np.ndarray:
     """
     自动计算曝光增益，将画面的“几何平均亮度”拉升到 target_gray (默认0.18)。
     这模拟了相机的自动测光。
@@ -264,7 +266,7 @@ def auto_expose_linear(img_linear: np.ndarray, source_colorspace: colour.RGB_Col
     # 如果你的RAW普遍非常暗，可以把上限调高，比如 64.0 (相当于+6档快门)
     gain = np.clip(gain, 1.0, 50.0)
     
-    print(f"  ⚖️  [Auto Exposure] Gain: {gain:.4f} (Base Avg: {avg_lum:.5f})")
+    logger(f"  ⚖️  [Auto Exposure] Gain: {gain:.4f} (Base Avg: {avg_lum:.5f})")
     
     return img_linear * gain
 

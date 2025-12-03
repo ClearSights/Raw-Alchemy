@@ -8,6 +8,19 @@ import numpy as np
 from typing import Optional, Tuple
 import platform
 import os
+import sys
+
+def _get_base_path():
+    """
+    Gets the base path for data files.
+    Handles running as a script and as a frozen PyInstaller executable.
+    """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # Running in a PyInstaller bundle. The path is to the temp folder.
+        return sys._MEIPASS
+    else:
+        # Running as a normal script. The path is to the script's directory.
+        return os.path.dirname(os.path.abspath(__file__))
 
 # 根据平台加载正确的库
 def _load_lensfun_library():
@@ -16,31 +29,29 @@ def _load_lensfun_library():
     
     try:
         if system == "Windows":
-            # Windows: 优先搜索项目vendor目录
-            # 获取当前文件所在目录 (src/raw_alchemy/)
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # vendor路径在当前目录下: src/raw_alchemy/vendor/lensfun/bin/lensfun.dll
-            vendor_bin = os.path.join(current_dir, "vendor", "lensfun", "bin", "lensfun.dll")
-            
-            if os.path.exists(vendor_bin):
-                print(f"  ✨ [Lensfun] Using local library: {vendor_bin}")
-                lib = ctypes.CDLL(vendor_bin)
+            base_path = _get_base_path()
+            vendor_dir = os.path.join(base_path, "vendor", "lensfun", "bin")
+            vendor_dll = os.path.join(vendor_dir, "lensfun.dll")
+
+            if os.path.exists(vendor_dll):
+                # For Python 3.8+ on Windows, add the DLL's directory to the search path
+                # to ensure its dependencies are found, especially in child processes.
+                if hasattr(os, 'add_dll_directory'):
+                    with os.add_dll_directory(vendor_dir):
+                        lib = ctypes.CDLL(vendor_dll)
+                else:
+                    # For older Python, this might fail if dependencies are not in PATH
+                    lib = ctypes.CDLL(vendor_dll)
             else:
-                # 回退到系统路径
-                print(f"  ⚠️ [Lensfun] Local library not found ({vendor_bin}), trying system path...")
+                # Fallback to system path
                 lib = ctypes.CDLL("lensfun.dll")
         elif system == "Darwin":
-            # macOS: liblensfun.dylib
             lib = ctypes.CDLL("liblensfun.dylib")
         else:
-            # Linux: liblensfun.so
             lib = ctypes.CDLL("liblensfun.so.1")
         return lib
-    except OSError as e:
-        # 不抛出异常，返回None让调用者处理
-        print(f"  ❌ [Lensfun] Error loading library: {e}")
-        if system == "Windows":
-            print(f"  💡 [Hint] Ensure 'lensfun.dll' is in system path or at: {os.path.join(current_dir, 'vendor', 'lensfun', 'bin')}")
+    except OSError:
+        # Silently fail. The error will be reported by the calling function if _lensfun is None.
         return None
 
 
@@ -226,7 +237,7 @@ if _lensfun:
 class LensfunDatabase:
     """Lensfun数据库包装器"""
     
-    def __init__(self):
+    def __init__(self, logger: callable = print):
         if not _lensfun:
             raise RuntimeError("Lensfun library not loaded")
         self.db = _lensfun.lf_db_create()
@@ -234,15 +245,15 @@ class LensfunDatabase:
             raise RuntimeError("Could not create lensfun database")
         
         # 检查本地数据库路径
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.join(current_dir, "vendor", "lensfun", "db")
+        base_path = _get_base_path()
+        db_path = os.path.join(base_path, "vendor", "lensfun", "db")
         
         result = -1
         if os.path.isdir(db_path):
-            print(f"  ✨ [Lensfun] Found local database, loading from: {db_path}")
+            logger(f"  ✨ [Lensfun] Found local database, loading from: {db_path}")
             result = _lensfun.lf_db_load_path(self.db, db_path.encode('utf-8'))
         else:
-            print(f"  ℹ️ [Lensfun] Local database not found, loading from system default paths.")
+            logger(f"  ℹ️ [Lensfun] Local database not found, loading from system default paths.")
             result = _lensfun.lf_db_load(self.db)
 
         # Check loading result
@@ -383,7 +394,8 @@ def apply_lens_correction(
     correct_distortion: bool = True,
     correct_tca: bool = True,
     correct_vignetting: bool = True,
-    distance: float = 1000.0
+    distance: float = 1000.0,
+    logger: callable = print,
 ) -> np.ndarray:
     """应用镜头校正到图像
     
@@ -405,7 +417,7 @@ def apply_lens_correction(
         校正后的图像（与输入相同dtype）
     """
     if not _lensfun:
-        print("  ⚠️ [Lensfun] Library not loaded. Skipping lens correction.")
+        logger("  ⚠️ [Lensfun] Library not loaded. Skipping lens correction.")
         return image
     
     # 记住原始dtype以便最后转换回去
@@ -418,12 +430,12 @@ def apply_lens_correction(
     height, width = image.shape[:2]
     
     # 创建数据库并查找相机和镜头
-    db = LensfunDatabase()
+    db = LensfunDatabase(logger=logger)
     camera = db.find_camera(camera_maker, camera_model)
     lens = db.find_lens(camera, lens_maker, lens_model)
     
     if not lens:
-        print(f"  ⚠️ [Lensfun] Lens not found: {lens_maker} {lens_model}. Skipping correction.")
+        logger(f"  ⚠️ [Lensfun] Lens not found: {lens_maker} {lens_model}. Skipping correction.")
         return image
     
     # 确定裁剪系数
