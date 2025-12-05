@@ -4,11 +4,10 @@ import os
 import threading
 import queue
 import multiprocessing
-import concurrent.futures
 import sys
 
-from raw_alchemy import core
-from raw_alchemy.cli import SUPPORTED_RAW_EXTENSIONS
+from raw_alchemy import core, orchestrator
+from raw_alchemy.orchestrator import SUPPORTED_RAW_EXTENSIONS
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -102,6 +101,18 @@ class GuiApplication(tk.Frame):
         self.lensfun_db_entry.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
         self.browse_lensfun_db_btn = ttk.Button(settings_frame, text="Browse...", command=self.browse_lensfun_db)
         self.browse_lensfun_db_btn.grid(row=2, column=2, padx=5, pady=5)
+
+        # Concurrent Jobs
+        self.jobs_label = ttk.Label(settings_frame, text="Concurrent Jobs:")
+        self.jobs_label.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        self.jobs_var = tk.IntVar(value=4)
+        # Use cpu_count to set a reasonable max, default to 8 if it fails
+        try:
+            max_jobs = multiprocessing.cpu_count()
+        except NotImplementedError:
+            max_jobs = 8
+        self.jobs_spinbox = ttk.Spinbox(settings_frame, from_=1, to=max_jobs, textvariable=self.jobs_var, width=10)
+        self.jobs_spinbox.grid(row=3, column=1, padx=5, pady=5, sticky="w")
 
         settings_frame.columnconfigure(1, weight=1)
 
@@ -246,6 +257,7 @@ class GuiApplication(tk.Frame):
         log_space = self.log_space_var.get()
         lut_path = self.lut_path_var.get() or None
         custom_lensfun_db_path = self.custom_lensfun_db_path_var.get() or None
+        jobs = self.jobs_var.get()
         
         # Get exposure settings from UI
         exposure_mode = self.exposure_mode_var.get()
@@ -277,69 +289,18 @@ class GuiApplication(tk.Frame):
         self.log_queue = log_queue
 
         try:
-            if os.path.isdir(input_path):
-                # --- Batch Processing (Parallel) ---
-                if not os.path.isdir(output_path):
-                    self.log("❌ Error: For batch processing, the output path must be a directory.")
-                    raise ValueError("Output path must be a directory for batch mode.")
-
-                raw_files = []
-                for ext in SUPPORTED_RAW_EXTENSIONS:
-                    raw_files.extend([f for f in os.listdir(input_path) if f.lower().endswith(ext)])
-
-                if not raw_files:
-                    self.log("⚠️ No supported RAW files found in the input directory.")
-                    raise ValueError("No RAW files found.")
-
-                self.log(f"🔍 Found {len(raw_files)} RAW files for parallel processing.")
-                
-                with concurrent.futures.ProcessPoolExecutor() as executor:
-                    futures = {
-                        executor.submit(
-                            core.process_image,
-                            raw_path=os.path.join(input_path, filename),
-                            output_path=os.path.join(output_path, f"{os.path.splitext(filename)[0]}.tif"),
-                            log_space=log_space,
-                            lut_path=lut_path,
-                            exposure=exposure_val,
-                            lens_correct=True,
-                            custom_db_path=custom_lensfun_db_path,
-                            metering_mode=metering_mode,
-                            log_queue=log_queue
-                        ): filename for filename in raw_files
-                    }
-                    
-                    for future in concurrent.futures.as_completed(futures):
-                        filename = futures[future]
-                        try:
-                            future.result()  # Check for exceptions from the process
-                        except Exception as exc:
-                            self.log(f'  ❌ {filename} generated an exception: {exc}')
-                
-                self.log("\n🎉 Batch processing complete.")
-
-            else:
-                # --- Single File Processing ---
-                final_output_path = output_path
-                if os.path.isdir(output_path):
-                    base_name = os.path.basename(input_path)
-                    file_name, _ = os.path.splitext(base_name)
-                    final_output_path = os.path.join(output_path, f"{file_name}.tif")
-                
-                self.log(f"⚙️ Processing single file...")
-                core.process_image(
-                    raw_path=input_path,
-                    output_path=final_output_path,
-                    log_space=log_space,
-                    lut_path=lut_path,
-                    exposure=exposure_val,
-                    lens_correct=True,
-                    custom_db_path=custom_lensfun_db_path,
-                    metering_mode=metering_mode,
-                    log_queue=log_queue
-                )
-                self.log("\n🎉 Single file processing complete.")
-
+            orchestrator.process_path(
+                input_path=input_path,
+                output_path=output_path,
+                log_space=log_space,
+                lut_path=lut_path,
+                exposure=exposure_val,
+                lens_correct=True,
+                custom_db_path=custom_lensfun_db_path,
+                metering_mode=metering_mode,
+                jobs=jobs,
+                logger_func=self.log_queue, # Pass the queue directly
+            )
         except Exception as e:
             self.log(f"  ❌ An unexpected error occurred: {e}")
         finally:
