@@ -501,11 +501,10 @@ def apply_lens_correction(
     output = np.zeros_like(image)
     
     # 步骤1: 应用颜色修改（暗角）
+    # 这是原位操作，会直接修改 image 数组。
+    # 后续的几何校正会从这个修改后的 image 中读取数据，所以这是期望的行为。
     if correct_vignetting:
-        # Lensfun的颜色修正是原位操作，所以我们需要一个副本
-        image_copy = image.copy()
-        modifier.apply_color_modification(image_copy, 0.0, 0.0, width, height)
-        image = image_copy
+        modifier.apply_color_modification(image, 0.0, 0.0, width, height)
     
     # 步骤2: 应用几何畸变和TCA校正
     if correct_distortion or correct_tca:

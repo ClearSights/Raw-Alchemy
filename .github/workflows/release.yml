@@ -28,6 +28,9 @@ jobs:
         env:
           CMAKE_PREFIX_PATH: ''
 
+      - name: Setup UPX
+        uses: sylveon/action-setup-upx@v1
+
       - name: Build executable with PyInstaller
         run: pyinstaller RawAlchemy.spec
 
@@ -50,7 +53,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install Linux system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libraw-dev
+        run: sudo apt-get update && sudo apt-get install -y libraw-dev upx-ucl
 
       - name: Install Python dependencies
         run: |
