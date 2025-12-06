@@ -36,6 +36,12 @@ a = Analysis(
     noarchive=False,
     optimize=1,
 )
+
+# On macOS, BUNDLE is used, which has its own icon parameter.
+# The .ico format is for Windows, so we remove it from datas on macOS.
+if sys.platform == 'darwin':
+    a.datas = [item for item in a.datas if item[0] != 'icon.ico']
+
 pyz = PYZ(a.pure)
 
 # Platform-specific EXE and BUNDLE for macOS .app creation
@@ -59,13 +65,15 @@ if sys.platform == 'darwin':
         entitlements_file=None,
         icon='icon.icns',
     )
+    # The COLLECT name must be different from the EXE name to avoid a file/directory name collision in the dist/ folder.
+    # BUNDLE will use this folder to create the final .app with the correct name.
     coll = COLLECT(
         exe,
         a.binaries,
         a.datas,
         strip=strip_executable,
         upx=False,
-        name='RawAlchemy',
+        name='RawAlchemy_COLLECT',
     )
     app = BUNDLE(
         coll,
