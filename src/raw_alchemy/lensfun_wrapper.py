@@ -27,33 +27,33 @@ def _load_lensfun_library():
     """加载lensfun动态库"""
     system = platform.system()
     base_path = _get_base_path()
-    
-    try:
-        if system == "Windows":
-            vendor_dir = os.path.join(base_path, "vendor", "lensfun", "win-x86_64")
-            vendor_dll = os.path.join(vendor_dir, "lensfun.dll")
+    lensfun_dir = os.path.join(base_path, "vendor", "lensfun")
+    lib_dir = os.path.join(lensfun_dir, "lib")
+    bin_dir = os.path.join(lensfun_dir, "bin")
 
-            if os.path.exists(vendor_dll):
-                if hasattr(os, 'add_dll_directory'):
-                    with os.add_dll_directory(vendor_dir):
-                        lib = ctypes.CDLL(vendor_dll)
-                else:
-                    lib = ctypes.CDLL(vendor_dll)
+    lib_path = None
+    if system == "Windows":
+        lib_path = os.path.join(lib_dir, "lensfun.dll")
+        # Add bin directory to DLL search path for dependencies
+        if os.path.isdir(bin_dir) and hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(bin_dir)
+    elif system == "Darwin":
+        lib_path = os.path.join(lib_dir, "liblensfun.dylib")
+    else:  # Linux and other Unix-like
+        lib_path = os.path.join(lib_dir, "liblensfun.so")
+
+    try:
+        if lib_path and os.path.exists(lib_path):
+            return ctypes.CDLL(lib_path)
+        else:
+            # Fallback to system paths if not found in vendor
+            if system == "Windows":
+                return ctypes.CDLL("lensfun.dll")
+            elif system == "Darwin":
+                return ctypes.CDLL("liblensfun.dylib")
             else:
-                lib = ctypes.CDLL("lensfun.dll")
-        elif system == "Darwin":
-            lib = ctypes.CDLL("liblensfun.dylib")
-        else:  # Linux and other Unix-like
-            vendor_dir = os.path.join(base_path, "vendor", "lensfun", "linux-x86_64")
-            vendor_so = os.path.join(vendor_dir, "liblensfun.so")
-            if os.path.exists(vendor_so):
-                lib = ctypes.CDLL(vendor_so)
-            else:
-                # Fallback to system path
-                lib = ctypes.CDLL("liblensfun.so")
-        return lib
+                return ctypes.CDLL("liblensfun.so")
     except OSError:
-        # Silently fail. The error will be reported by the calling function if _lensfun is None.
         return None
 
 
@@ -254,7 +254,7 @@ class LensfunDatabase:
         
         # 检查本地数据库路径
         base_path = _get_base_path()
-        db_path = os.path.join(base_path, "vendor", "lensfun", "db")
+        db_path = os.path.join(base_path, "vendor", "lensfun", "share", "lensfun", "version_2")
         
         result = -1
         if os.path.isdir(db_path):
