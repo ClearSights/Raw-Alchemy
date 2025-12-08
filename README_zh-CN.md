@@ -54,7 +54,7 @@
 
 对于大多数用户，使用 Raw Alchemy 最简单的方式是下载为您操作系统预编译的可执行文件。这无需安装 Python 或任何依赖。
 
-1.  前往 [**Releases**](https://github.com/shenmintao/raw-alchemy/releases) 页面。
+1.  前往 [**Releases**](https://gitee.com/MinQ/Raw-Alchemy/releases) 页面。
 2.  下载适用于您系统的最新可执行文件 (例如 `RawAlchemy-vX.Y.Z-windows.exe` 或 `RawAlchemy-vX.Y.Z-linux`)。
 3.  运行工具。详情请参阅 [使用方法](#使用方法) 部分。
 
@@ -64,7 +64,7 @@
 
 ```bash
 # 克隆本仓库
-git clone https://github.com/shenmintao/raw-alchemy.git
+git clone https://gitee.com/MinQ/Raw-Alchemy.git
 cd raw-alchemy
 
 # 安装工具及其依赖
@@ -126,7 +126,7 @@ pip install .
 
 Raw Alchemy 现在包含一个强大的脚本，用于转换和导入 Adobe LCP 格式的镜头配置文件。LCP 格式被 Adobe Camera Raw 和 DNG Converter 使用，这意味着您可以访问一个更庞大、更及时的镜头数据库。
 
-用于转换的脚本 lensfun-convert-lcp-new 可在 https://gitee.com/shenmintao/lensfun 中找到。
+用于转换的脚本 lensfun-convert-lcp-new 可在 [**Lensfun**](https://gitee.com/MinQ/lensfun) 中找到。
 
 **步骤：**
 
@@ -136,7 +136,7 @@ Raw Alchemy 现在包含一个强大的脚本，用于转换和导入 Adobe LCP 
     *   **macOS**: `/Library/Application Support/Adobe/CameraRaw/LensProfiles/1.0/`
 
 2.  **运行转换脚本。**
-    该脚本位于 lensfun 项目的 apps/ 目录下。您需要安装 Python 才能运行它。
+    该脚本位于 lensfun 项目的 apps/ 目录下，您需要安装 Python 才能运行它。
 
 3.  脚本将创建一个 `.xml` 文件 (例如 `_lcps.xml`)。您现在可以按照下面章节的说明，在图形界面或命令行中加载此文件。
 
