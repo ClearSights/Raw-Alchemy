@@ -115,7 +115,7 @@ class GuiApplication(tk.Frame):
         ttk.Checkbutton(lens_frame, text="Apply Lens Correction", variable=self.lens_correction_var, command=self.toggle_lens_db_controls).grid(row=0, column=0, columnspan=4, sticky="w", pady=5)
 
         # Row 1: Lensfun DB
-        self.lens_db_label = ttk.Label(lens_frame, text="Lens DB (XML):")
+        self.lens_db_label = ttk.Label(lens_frame, text="Custom Lens DB (XML):")
         self.lens_db_label.grid(row=1, column=0, sticky="w", pady=5)
         self.custom_lensfun_db_path_var = tk.StringVar()
         self.lens_db_entry = ttk.Entry(lens_frame, textvariable=self.custom_lensfun_db_path_var)
