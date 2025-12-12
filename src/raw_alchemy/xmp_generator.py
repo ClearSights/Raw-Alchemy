@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Adobe XMP Profile Generator (Full Feature)
+Adobe XMP Profile Generator (Fixed to match XMPconverter.cpp)
 
 Features:
 1. Color Space Transform (Linear ProPhoto -> Target Log -> User LUT).
@@ -11,291 +11,224 @@ Features:
 Dependencies: pip install colour-science numpy
 """
 
-import base64
 import hashlib
 import struct
-import time
 import uuid
 import zlib
 from io import BytesIO
 
 import numpy as np
 import colour
+
+# Handle optional dependencies for standalone usage
 try:
-    from .constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE, METERING_MODES
+    from .constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE
 except ImportError:
-    from constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE, METERING_MODES
+    # Dummy maps if running standalone for testing
+    LOG_ENCODING_MAP = {}
+    LOG_TO_WORKING_SPACE = {}
 
 # --- Constants & Mappings ---
 
-# Adobe Custom Base85 Characters
-ADOBE_Z85_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?`'|()[]{}@%$#"
+# Adobe Custom Base85 Characters (Standard Adobe Order)
+# C++ Source: kEncodeTable
+ADOBE_Z85_CHARS = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?`'|()[]{}@%$#"
+ADOBE_Z85_TABLE = [chr(c) for c in ADOBE_Z85_CHARS]
 
 # --- Core Logic ---
 
 def adobe_base85_encode(data: bytes) -> str:
-    """Encodes binary data into Adobe's custom Base85 format."""
+    """
+    Encodes binary data into Adobe's custom Base85 format.
+    
+    CRITICAL CHANGE: 
+    Matches XMPconverter.cpp logic which uses Little-Endian reading 
+    and LSB-first character generation (val % 85).
+    """
     length = len(data)
     encoded_chars = []
     
+    # Process 4-byte chunks
     for i in range(0, length, 4):
         chunk = data[i : i + 4]
-        if len(chunk) < 4:
-            chunk = chunk + b'\x00' * (4 - len(chunk))
+        chunk_len = len(chunk)
         
+        # Pad with null bytes if less than 4
+        if chunk_len < 4:
+            chunk = chunk + b'\x00' * (4 - chunk_len)
+        
+        # Unpack as Little-Endian Unsigned Int (<I)
+        # C++ does: x = *(sPtr_1_ + i); which is LE on Intel/Windows
         val = struct.unpack('<I', chunk)[0]
         
-        # DNG SDK Logic: val / 85 ... output in reverse modulus order
-        # Actually DNG outputs: c1, c2, c3, c4, c5 where c1 is val % 85
+        # Calculate 5 Base85 characters
+        # C++ logic: for (j=0; j<5; ++j, x /= 85) dPtr_2[k++] = kEncodeTable[x % 85];
+        # This outputs the LSB (remainder) first.
         for _ in range(5):
-            encoded_chars.append(ADOBE_Z85_CHARS[val % 85])
+            encoded_chars.append(ADOBE_Z85_TABLE[val % 85])
             val //= 85
-            
-    if length % 4 == 0:
-        return "".join(encoded_chars)
-    else:
-        # Padding logic matching DNG SDK
+
+    # Handle padding length correction
+    # If original length is not div by 4, we must output only the needed characters.
+    # 1 byte  -> 2 chars
+    # 2 bytes -> 3 chars
+    # 3 bytes -> 4 chars
+    if length % 4 != 0:
         rem = length % 4
-        # 1 byte -> 2 chars, 2 bytes -> 3 chars, 3 bytes -> 4 chars
-        needed_chars = (len(data) // 4) * 5 + (rem + 1)
-        return "".join(encoded_chars[:needed_chars])
+        # Calculate how many chars to keep from the last block of 5
+        chars_to_keep = rem + 1
+        # Remove the extra characters from the end
+        encoded_chars = encoded_chars[: -(5 - chars_to_keep)]
+
+    return "".join(encoded_chars)
 
 def int_round(arr):
     """Matches C++ int_round: floor(n + 0.5)"""
     return np.floor(arr + 0.5).astype(np.int32)
 
-def tetrahedral_resample(data, input_size, output_size):
-    """
-    Performs Tetrahedral Interpolation on a 3D LUT (numpy array).
-    data shape: (B, G, R, 3) or (Z, Y, X, 3)
-    """
-    if input_size == output_size:
-        return data
-
-    ratio = (input_size - 1.0) / (output_size - 1.0)
-    
-    # Generate output grid coordinates (0..output_size-1)
-    grid = np.arange(output_size, dtype=np.float64)
-    # Create 3D mesh: Z(Blue), Y(Green), X(Red)
-    zz, yy, xx = np.meshgrid(grid, grid, grid, indexing='ij')
-    
-    # Map to input coordinates
-    bs = zz * ratio
-    gs = yy * ratio
-    rs = xx * ratio
-
-    # Lower bounds
-    lb = np.clip(np.floor(bs).astype(np.int32), 0, input_size - 1)
-    lg = np.clip(np.floor(gs).astype(np.int32), 0, input_size - 1)
-    lr = np.clip(np.floor(rs).astype(np.int32), 0, input_size - 1)
-
-    # Upper bounds
-    ub = np.clip(lb + 1, 0, input_size - 1)
-    ug = np.clip(lg + 1, 0, input_size - 1)
-    ur = np.clip(lr + 1, 0, input_size - 1)
-
-    # Fractions
-    fb = bs - lb
-    fg = gs - lg
-    fr = rs - lr
-
-    # Helper for readability
-    def get(z, y, x): return data[z, y, x]
-
-    # 8 Corners
-    c000 = get(lb, lg, lr); c100 = get(ub, lg, lr) # Note: ub is axis 0 (Blue) change
-    c010 = get(lb, ug, lr); c110 = get(ub, ug, lr)
-    c001 = get(lb, lg, ur); c101 = get(ub, lg, ur) # ur is axis 2 (Red) change
-    c011 = get(lb, ug, ur); c111 = get(ub, ug, ur)
-
-    # Note on axes: Since input `data` is (B, G, R), 
-    # fb corresponds to axis 0, fg to axis 1, fr to axis 2.
-    f0, f1, f2 = fb[..., None], fg[..., None], fr[..., None]
-    
-    # Tetrahedral Logic (6 cases)
-    # 1. f0 >= f1 >= f2 (Blue >= Green >= Red)
-    mask = (f0 >= f1) & (f1 >= f2); m = mask[..., None]
-    out = m * ((1-f0)*c000 + (f0-f1)*c100 + (f1-f2)*c110 + f2*c111)
-    
-    # 2. f0 > f2 > f1
-    mask = (f0 > f2) & (f2 > f1); m = mask[..., None]
-    out += m * ((1-f0)*c000 + (f0-f2)*c100 + (f2-f1)*c101 + f1*c111)
-    
-    # 3. f2 > f0 > f1
-    mask = (f2 > f0) & (f0 > f1); m = mask[..., None]
-    out += m * ((1-f2)*c000 + (f2-f0)*c001 + (f0-f1)*c101 + f1*c111)
-    
-    # 4. f2 > f1 >= f0
-    mask = (f2 > f1) & (f1 >= f0); m = mask[..., None]
-    out += m * ((1-f2)*c000 + (f2-f1)*c001 + (f1-f0)*c011 + f0*c111)
-    
-    # 5. f1 >= f2 > f0
-    mask = (f1 >= f2) & (f2 > f0); m = mask[..., None]
-    out += m * ((1-f1)*c000 + (f1-f2)*c010 + (f2-f0)*c011 + f0*c111)
-    
-    # 6. f1 > f0 >= f2
-    mask = (f1 > f0) & (f0 >= f2); m = mask[..., None]
-    out += m * ((1-f1)*c000 + (f1-f0)*c010 + (f0-f2)*c110 + f2*c111)
-
-    return out
-
-def apply_cst_pipeline(user_lut_path, log_space, output_size=33):
+def apply_cst_pipeline(user_lut_path, log_space, output_size=33, _log=print):
     """
     Loads user LUT, creates ProPhoto Identity, transforms to Log, applies LUT.
     Returns: (output_size, final_data_numpy)
     """
-    print(f"Processing: Reading {user_lut_path}...")
+    _log(f"Processing: Reading {user_lut_path}...")
     user_lut = colour.read_LUT(user_lut_path)
-    # Ensure standard (B, G, R, 3) shape for 3D LUTs
-    # colour-science reads .cube as (Size, Size, Size, 3) usually.
     
-    # 1. Create Identity Grid in Linear ProPhoto RGB (ACR Working Space)
-    # We create it directly at the target output size to avoid resizing later if possible
-    # But for accuracy, we usually want to process at the LUT's native size then downsample, 
-    # OR create identity at 32x32x32 directly. 
-    # ACR standard is 32 (or 33). Let's use 32 directly for the grid.
-    
+    # --- FIX START ---
+    # 1. Create Identity Grid in Linear ProPhoto RGB
+    # 修正：使用 (R, G, B) 顺序。Axis 0 是 R，Axis 2 是 B。
+    # 这符合 colour-science 和 .cube 文件的标准顺序。
     domain = np.linspace(0, 1, output_size)
-    # Grid shape: (B, G, R, 3) -> (32, 32, 32, 3)
-    # Note: meshgrid indexing 'ij' gives Z, Y, X order
-    B, G, R = np.meshgrid(domain, domain, domain, indexing='ij')
-    prophoto_linear = np.stack([R, G, B], axis=-1) # Stack as RGB for color math
+    R, G, B = np.meshgrid(domain, domain, domain, indexing='ij')
+    
+    # 堆叠为 (R, G, B, 3) 形状
+    prophoto_linear = np.stack([R, G, B], axis=-1) 
+    # --- FIX END ---
     
     log_color_space_name = LOG_TO_WORKING_SPACE.get(log_space)
     log_curve_name = LOG_ENCODING_MAP.get(log_space, log_space)
 
-    print(f"  - Pipeline: ProPhoto Linear -> {log_color_space_name} -> {log_curve_name} -> LUT")
+    _log(f"  - Pipeline: ProPhoto Linear -> {log_color_space_name} -> {log_curve_name} -> LUT")
         
     # A. Gamut Transform: ProPhoto RGB -> Target Gamut (Linear)
     matrix = colour.matrix_RGB_to_RGB(
         colour.RGB_COLOURSPACES['ProPhoto RGB'],
         colour.RGB_COLOURSPACES[log_color_space_name]
     )
-    # Apply matrix (dot product on last axis)
-    target_gamut_linear = np.einsum('...ij,...j->...i', matrix, prophoto_linear)
+    # 矩阵乘法 (Numpy array 是行向量，所以乘转置矩阵)
+    target_gamut_linear = prophoto_linear @ matrix.T
     target_gamut_linear = np.maximum(target_gamut_linear, 1e-7)
+
     # B. Transfer Function: Linear -> Log
     log_encoded = colour.cctf_encoding(target_gamut_linear, function=log_curve_name)
         
     # C. Apply User LUT
-    # Since our grid is 33x33x33 but user LUT might be 33x33x33 or 65x65x65,
-    # we interpolate the user LUT at the log_encoded coordinates.
-    print(f"  - Applying User LUT ({user_lut.size}^3) to grid...")
+    # 由于现在的 grid 结构是 (R,G,B)，与 standard LUT 结构一致，插值结果也会保持正确的空间顺序
+    _log(f"  - Applying User LUT ({user_lut.size}^3) to grid...")
     final_rgb = user_lut.apply(log_encoded, interpolator=colour.algebra.table_interpolation_tetrahedral)
     
-    # --- Debug Feature: Output Pipeline Cube ---
+    # --- Debug Feature ---
     try:
-        # Generate a unique debug filename or overwrite a standard one
         debug_filename = f"debug_pipeline_{output_size}.cube"
-        print(f"  [DEBUG] Writing pipeline output to {debug_filename}...")
-        
-        # Create a LUT3D object for export
-        # Note: Ensure the data is clamped if necessary, but usually we want to see raw output
+        _log(f"  [DEBUG] Writing pipeline output to {debug_filename}...")
+        # 此时 final_rgb 已经是标准的 (R, G, B, 3) 顺序，可以直接写入
         debug_lut = colour.LUT3D(table=final_rgb, name=f"Debug Pipeline {log_space}")
         colour.write_LUT(debug_lut, debug_filename)
-        print(f"  [DEBUG] Successfully wrote {debug_filename}")
+        _log(f"  [DEBUG] Successfully wrote {debug_filename}")
     except Exception as e:
-        print(f"  [DEBUG] Failed to write debug cube: {e}")
-    # -------------------------------------------
+        _log(f"  [DEBUG] Failed to write debug cube: {e}")
 
     return output_size, final_rgb
 
 def generate_rgb_table_stream(data, size, min_amt=0, max_amt=200):
     """
     Encodes the numpy data into DNG RGBTable binary format.
-    data shape expected: (B, G, R, 3) where last dim is [r_val, g_val, b_val]
+    Input data shape MUST be: (R, G, B, 3)
     """
     stream = BytesIO()
     def write_u32(val): stream.write(struct.pack('<I', val))
     def write_double(val): stream.write(struct.pack('<d', val))
     
     # Header
-    write_u32(1) # btt_RGBTable (MUST BE 1)
+    write_u32(1) # btt_RGBTable
     write_u32(1) # Version
     write_u32(3) # Dimensions
     write_u32(size) # Divisions
     
-    # Data Processing
     # 1. Clip and Scale
     data = np.clip(data, 0.0, 1.0)
-    data_u16 = int_round(data * 65535)
+    data_u16 = int_round(data * 65535) # Shape (R, G, B, 3)
     
-    # 2. Prepare Identity (Nop) Curve
+    # 2. Prepare Identity Curve
     indices = np.arange(size, dtype=np.int32)
+    # Standard DNG Identity logic
     nop_curve = (indices * 0xFFFF + (size >> 1)) // (size - 1)
     
-    # 3. Prepare Nop Grid matching Data Shape (B, G, R)
-    # axis 0=B, 1=G, 2=R.
-    grid_b, grid_g, grid_r = np.meshgrid(nop_curve, nop_curve, nop_curve, indexing='ij')
+    # 3. Prepare Nop Grid matching Data Shape (R, G, B)
+    # indexing='ij' -> Axis 0=R, 1=G, 2=B.
+    grid_r, grid_g, grid_b = np.meshgrid(nop_curve, nop_curve, nop_curve, indexing='ij')
     
-    # 4. Calculate Deltas (Sample - Identity)
-    # Data is [R, G, B] values.
-    # delta_r = val_r - grid_r (where grid_r varies along axis 2)
+    # 4. Calculate Deltas (Value - Identity)
     delta_r = data_u16[..., 0] - grid_r
     delta_g = data_u16[..., 1] - grid_g
     delta_b = data_u16[..., 2] - grid_b
     
-    # 5. Reorder for DNG Loop: R(outer), G, B(inner)
-    # Current shape (B, G, R).
-    # We want flattened order equivalent to: for r: for g: for b: write(r,g,b)
-    # So we need to transpose dimensions to (R, G, B) before flattening.
-    # Current axes: 0=B, 1=G, 2=R. Target: 2, 1, 0.
-    delta_r = delta_r.transpose(2, 1, 0)
-    delta_g = delta_g.transpose(2, 1, 0)
-    delta_b = delta_b.transpose(2, 1, 0)
+    # 5. Interleave and Flatten
+    # C++ Loop Order: bIndex(outer), gIndex, rIndex(inner).
+    # Memory Layout: This implies Row-Major (C-Style) flattening of an (R, G, B) block matches.
+    # Stack along last axis -> (R, G, B, 3)
+    deltas_stacked = np.stack((delta_r, delta_g, delta_b), axis=-1)
     
-    # Stack [DeltaR, DeltaG, DeltaB]
-    deltas = np.stack((delta_r, delta_g, delta_b), axis=-1)
+    # Flatten to 1D array
+    # Since we are casting to uint16, we need to handle negative values (deltas)
+    # by simulating overflow/cast. 
+    flat_deltas = deltas_stacked.flatten().astype(np.int32)
     
-    # Flatten
-    flat_deltas = deltas.flatten().astype(np.uint16)
-    
-    # Write Payload
-    if struct.pack('<H', 1) == b'\x01\x00':
-        stream.write(flat_deltas.tobytes())
-    else:
-        stream.write(flat_deltas.byteswap().tobytes())
+    # Convert to 16-bit bytes (Little Endian)
+    # astype('<u2') will interpret the lower 16 bits of the int32, correctly handling negative 2's complement
+    stream.write(flat_deltas.astype('<u2').tobytes())
         
     # Footer
-    write_u32(0) # ProPhoto
-    write_u32(1) # Linear Gamma (Since we baked the curve in)
-    write_u32(0) # Gamut Extend
-    write_double(min_amt * 0.01) # 0.0
-    write_double(max_amt * 0.01) # 2.0
+    write_u32(0) # sRGB
+    write_u32(1) # sRGB (Gamma)
+    write_u32(0) # Gamut Extend (0=Clip)
+    write_double(min_amt * 0.01)
+    write_double(max_amt * 0.01)
     
     return stream.getvalue()
 
-def create_xmp_profile(profile_name, lut_path, log_space=None):
-    """
-    Main Entry Point.
-    """
-    # 1. Generate UUIDs
+def create_xmp_profile(profile_name, lut_path, log_space=None, _log=print):
     profile_uuid = str(uuid.uuid4()).replace('-', '').upper()
     
     try:
-        # 2. Process Color Pipeline & Resizing
-        # Target size 32 is standard for ACR RGBTable
-        size, data = apply_cst_pipeline(lut_path, log_space, output_size=33)
+        # Standard size for DNG RGBTable is often 32 or 33.
+        size, data = apply_cst_pipeline(lut_path, log_space, output_size=33, _log=_log)
         
-        # 3. Binary Encoding
+        # Binary Encoding
         raw_bytes = generate_rgb_table_stream(data, size, min_amt=0, max_amt=200)
         
-        # 4. Fingerprinting
+        # Fingerprinting (MD5 of uncompressed binary)
         m = hashlib.md5()
         m.update(raw_bytes)
         fingerprint = m.hexdigest().upper()
         
-        # 5. Compression & ASCII Encoding
-        # 4-byte LE size header
+        # Compression & ASCII Encoding
+        # 1. Prefix with original length (4 bytes Little Endian)
+        # Matches C++: memcpy(dPtr_1, &uncompressedSize_1, 4) -> LE on x86
         header = struct.pack('<I', len(raw_bytes))
-        compressed = zlib.compress(raw_bytes, level=zlib.Z_DEFAULT_COMPRESSION)
+        
+        # 2. Compress payload
+        compressed = zlib.compress(raw_bytes, level=zlib.Z_BEST_COMPRESSION)
+        
+        # 3. Base85 Encode the whole thing (Header + Compressed Data)
         encoded_data = adobe_base85_encode(header + compressed)
         
     except Exception as e:
-        print(f"Error creating profile: {e}")
+        _log(f"Error creating profile: {e}")
+        import traceback
+        traceback.print_exc()
         return ""
 
-    # 6. XML Generation (Matches testabc.txt)
     xmp_template = f"""<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        ">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
@@ -327,26 +260,11 @@ def create_xmp_profile(profile_name, lut_path, log_space=None):
      <rdf:li xml:lang="x-default">{profile_name}</rdf:li>
     </rdf:Alt>
    </crs:Name>
-   <crs:ShortName>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default"/>
-    </rdf:Alt>
-   </crs:ShortName>
-   <crs:SortName>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default"/>
-    </rdf:Alt>
-   </crs:SortName>
    <crs:Group>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">Profiles</rdf:li>
     </rdf:Alt>
    </crs:Group>
-   <crs:Description>
-    <rdf:Alt>
-     <rdf:li xml:lang="x-default">Generated by xmp_generator</rdf:li>
-    </rdf:Alt>
-   </crs:Description>
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>

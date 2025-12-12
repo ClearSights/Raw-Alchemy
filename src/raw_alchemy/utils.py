@@ -1,8 +1,12 @@
 from typing import Optional
 import rawpy
 import numpy as np
-from . import lensfun_wrapper as lf
+
 from numba import njit, prange
+try:
+    from . import lensfun_wrapper as lf
+except ImportError:
+    from raw_alchemy import lensfun_wrapper as lf
 
 # =========================================================
 # Numba 加速核函数 (In-Place / 无内存分配)

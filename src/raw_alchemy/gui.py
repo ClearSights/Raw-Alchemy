@@ -7,25 +7,13 @@ import multiprocessing
 import sys
 import time
 
-# Handle imports to allow running as a script or a package
 try:
-    # Attempt relative imports (preferred for package usage)
-    from . import core, orchestrator
+    from . import core, orchestrator, xmp_tool_gui
     from .orchestrator import SUPPORTED_RAW_EXTENSIONS
-    from .xmp_tool_gui import XMPToolWindow
 except ImportError:
-    # Fallback for direct execution (e.g., python src/raw_alchemy/gui.py)
-    import sys
-    import os
-    # Add the src directory to sys.path
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_dir = os.path.dirname(current_dir)
-    if src_dir not in sys.path:
-        sys.path.insert(0, src_dir)
-    
-    from raw_alchemy import core, orchestrator
+    from raw_alchemy import core, orchestrator, xmp_tool_gui
     from raw_alchemy.orchestrator import SUPPORTED_RAW_EXTENSIONS
-    from raw_alchemy.xmp_tool_gui import XMPToolWindow
+
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -76,7 +64,7 @@ class GuiApplication(tk.Frame):
         tools_menu.add_command(label="XMP Profile Generator...", command=self.open_xmp_tool)
 
     def open_xmp_tool(self):
-        XMPToolWindow(self.master)
+        xmp_tool_gui.XMPToolWindow(self.master)
 
     def create_widgets(self):
         # --- Frame for IO ---

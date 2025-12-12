@@ -10,13 +10,11 @@ from typing import Optional
 
 # 尝试导入同级目录下的 utils，如果失败则尝试绝对导入 (方便不同运行环境调试)
 try:
-    from . import utils
-    from . import xmp_generator
+    from . import utils, xmp_generator
     from .constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE, METERING_MODES
 except ImportError:
-    import utils
-    import xmp_generator
-    from constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE, METERING_MODES
+    from raw_alchemy import utils, xmp_generator
+    from raw_alchemy.constants import LOG_ENCODING_MAP, LOG_TO_WORKING_SPACE, METERING_MODES
 
 # ==========================================
 #              2. 核心处理函数
@@ -83,9 +81,12 @@ def _decode_and_prepare_raw(
         )
     else:
         _log("  🔹 [Step 3] Skipping Lens Correction.")
+
+    # 稍微增加饱和度和对比度，为 LUT 转换打底
+    _log("  🔹 [Step 3.5] Applying Camera-Match Boost...")
+    img = utils.apply_saturation_and_contrast(img, saturation=1.25, contrast=1.1)
     
     return img
-
 
 def process_image(
     raw_path: str,
@@ -112,10 +113,6 @@ def process_image(
     img = _decode_and_prepare_raw(
         raw_path, exposure, metering_mode, lens_correct, custom_db_path, _log
     )
-
-    # 稍微增加饱和度和对比度，为 LUT 转换打底
-    _log("  🔹 [Step 3.5] Applying Camera-Match Boost...")
-    img = utils.apply_saturation_and_contrast(img, saturation=1.25, contrast=1.1)
 
     # --- Step 4: 色彩空间转换 (ProPhoto Linear -> Log) ---
     log_color_space_name = LOG_TO_WORKING_SPACE.get(log_space)
@@ -180,7 +177,7 @@ def process_image(
                 photometric='rgb',
                 compression='zlib',
                 # 【优化】predictor=2 (水平差分) 大幅提升照片压缩率
-                predictor=2,       
+                # predictor=2,       
                 # 【优化】level=8 平衡速度和体积
                 compressionargs={'level': 8} 
             )
@@ -270,7 +267,7 @@ def generate_prophoto_tiff(
             output_image_uint16,
             photometric='rgb',
             compression='zlib',
-            predictor=2,
+            # predictor=2,
             compressionargs={'level': 8}
         )
         _log(f"  ✅ Saved: {output_path}")
@@ -339,6 +336,7 @@ def process_with_xmp(
             profile_name=profile_name,
             log_space=log_space,
             lut_path=lut_path,
+            _log=_log
         )
         
         with open(xmp_path, 'w', encoding='utf-8') as f:
