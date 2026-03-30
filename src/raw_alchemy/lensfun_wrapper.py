@@ -302,7 +302,10 @@ if _lensfun:
     _lensfun.lf_free.argtypes = [ctypes.c_void_p]
 
     _lensfun.lf_modifier_get_auto_scale.restype = ctypes.c_float
-    _lensfun.lf_modifier_get_auto_scale.argtypes = [ctypes.POINTER(lfModifier)]
+    _lensfun.lf_modifier_get_auto_scale.argtypes = [
+        ctypes.POINTER(lfModifier),
+        ctypes.c_int,
+    ]
 
 
 # ============================================================================
@@ -431,9 +434,9 @@ class LensfunModifier:
         """启用缩放"""
         return _lensfun.lf_modifier_enable_scaling(self.modifier, scale)
 
-    def get_auto_scale(self) -> float:
+    def get_auto_scale(self, reverse: bool = False) -> float:
         """获取自动缩放比例"""
-        return _lensfun.lf_modifier_get_auto_scale(self.modifier)
+        return _lensfun.lf_modifier_get_auto_scale(self.modifier, int(reverse))
 
     def apply_subpixel_geometry_distortion(self, xu: float, yu: float,
                                            width: int, height: int) -> Optional[np.ndarray]:
